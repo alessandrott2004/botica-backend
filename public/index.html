@@ -1,0 +1,908 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Botica Nova Salud - Sistema de Gestión</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Google Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <!-- Font Awesome -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    body { font-family: 'Inter', sans-serif; }
+    .badge-alert { animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .6; } }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col">
+
+  <!-- Navbar -->
+  <header class="bg-teal-700 text-white shadow-md sticky top-0 z-30">
+    <div class="max-w-7xl mx-auto px-4 py-3 flex flex-wrap justify-between items-center gap-4">
+      <div class="flex items-center space-x-3">
+        <div class="bg-white text-teal-700 p-2 rounded-xl shadow-inner font-bold text-xl">
+          <i class="fa-solid fa-notes-medical"></i>
+        </div>
+        <div>
+          <h1 class="text-xl font-bold tracking-tight">Botica Nova Salud</h1>
+          <p class="text-xs text-teal-100">Gestión de Inventario & Punto de Venta (POS)</p>
+        </div>
+      </div>
+
+      <!-- Navigation Tabs -->
+      <nav class="flex space-x-1 sm:space-x-2">
+        <button onclick="switchTab('pos')" id="tab-pos" class="tab-btn active px-3.5 py-2 text-sm font-medium rounded-lg bg-teal-800 text-white flex items-center gap-2 transition">
+          <i class="fa-solid fa-cash-register"></i> Punto de Venta
+        </button>
+        <button onclick="switchTab('inventory')" id="tab-inventory" class="tab-btn px-3.5 py-2 text-sm font-medium rounded-lg text-teal-100 hover:bg-teal-600 transition flex items-center gap-2">
+          <i class="fa-solid fa-boxes-stacked"></i> Inventario
+        </button>
+        <button onclick="switchTab('alerts')" id="tab-alerts" class="tab-btn px-3.5 py-2 text-sm font-medium rounded-lg text-teal-100 hover:bg-teal-600 transition flex items-center gap-2 relative">
+          <i class="fa-solid fa-bell"></i> Alertas
+          <span id="badge-alerts-count" class="hidden bg-rose-500 text-white text-xs px-1.5 py-0.5 rounded-full font-bold ml-1">0</span>
+        </button>
+        <button onclick="switchTab('sales-history')" id="tab-sales-history" class="tab-btn px-3.5 py-2 text-sm font-medium rounded-lg text-teal-100 hover:bg-teal-600 transition flex items-center gap-2">
+          <i class="fa-solid fa-receipt"></i> Ventas
+        </button>
+      </nav>
+    </div>
+  </header>
+
+  <!-- Banner de Notificación Rápida -->
+  <div id="toast-container" class="fixed top-20 right-5 z-50 flex flex-col gap-2 max-w-md w-full"></div>
+
+  <!-- Contenido Principal -->
+  <main class="max-w-7xl mx-auto px-4 py-6 flex-1 w-full">
+
+    <!-- 1. PESTAÑA: PUNTO DE VENTA (POS) -->
+    <section id="view-pos" class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+      
+      <!-- Columna Izquierda: Buscador y Catálogo Rápido -->
+      <div class="lg:col-span-7 space-y-4">
+        
+        <!-- Barra de Búsqueda -->
+        <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+          <label class="block text-xs font-semibold text-slate-500 uppercase mb-2">Búsqueda rápida de fármacos</label>
+          <div class="relative">
+            <span class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+              <i class="fa-solid fa-magnifying-glass"></i>
+            </span>
+            <input 
+              type="text" 
+              id="pos-search-input"
+              placeholder="Buscar por nombre, principio activo o código de barra..." 
+              class="w-full pl-10 pr-4 py-2.5 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500 text-sm"
+              oninput="handleSearch(this.value)"
+            >
+          </div>
+          <p class="text-xs text-slate-400 mt-2">
+            <i class="fa-solid fa-lightbulb text-amber-500 mr-1"></i> Tip: Puedes buscar tanto genéricos como marcas registradas (ej. <em>Paracetamol</em> o <em>Panadol</em>).
+          </p>
+        </div>
+
+        <!-- Resultados de Búsqueda / Catálogo -->
+        <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+          <div class="px-4 py-3 bg-slate-50 border-b border-slate-200 flex justify-between items-center">
+            <h2 class="font-semibold text-sm text-slate-700 flex items-center gap-2">
+              <i class="fa-solid fa-pills text-teal-600"></i> Catálogo de Medicamentos
+            </h2>
+            <span id="pos-results-count" class="text-xs text-slate-500">Cargando...</span>
+          </div>
+          <div id="pos-products-list" class="divide-y divide-slate-100 max-h-[500px] overflow-y-auto">
+            <!-- Renderizado dinámico -->
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Columna Derecha: Carrito de Venta y Cobro -->
+      <div class="lg:col-span-5 space-y-4">
+        <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-5 flex flex-col h-full">
+          <div class="flex justify-between items-center pb-3 border-b border-slate-100">
+            <h2 class="font-bold text-slate-800 text-base flex items-center gap-2">
+              <i class="fa-solid fa-cart-shopping text-teal-600"></i> Orden de Venta
+            </h2>
+            <button onclick="clearCart()" class="text-xs text-rose-500 hover:text-rose-700 font-medium">
+              <i class="fa-solid fa-trash-can mr-1"></i> Vaciar
+            </button>
+          </div>
+
+          <!-- Selección de Cliente -->
+          <div class="my-3">
+            <label class="block text-xs font-semibold text-slate-500 uppercase mb-1">Cliente</label>
+            <select id="pos-customer-select" class="w-full py-2 px-3 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500">
+              <option value="">Cliente Ocasional / Sin DNI</option>
+            </select>
+          </div>
+
+          <!-- Lista de Items en Carrito -->
+          <div id="pos-cart-items" class="flex-1 overflow-y-auto max-h-[280px] divide-y divide-slate-100 my-2">
+            <div class="py-10 text-center text-slate-400 text-sm">
+              <i class="fa-solid fa-cart-arrow-down text-3xl mb-2 text-slate-300"></i>
+              <p>El carrito está vacío</p>
+              <p class="text-xs">Selecciona productos de la lista para agregarlos.</p>
+            </div>
+          </div>
+
+          <!-- Resumen de Totales y Método de Pago -->
+          <div class="pt-4 border-t border-slate-100 space-y-3">
+            <div class="flex justify-between text-sm text-slate-600">
+              <span>Subtotal</span>
+              <span id="pos-subtotal">S/ 0.00</span>
+            </div>
+            <div class="flex justify-between text-sm text-slate-600">
+              <span>IGV (Incluido)</span>
+              <span id="pos-igv">S/ 0.00</span>
+            </div>
+            <div class="flex justify-between text-lg font-bold text-slate-900 pt-2 border-t border-slate-200">
+              <span>Total a Pagar</span>
+              <span id="pos-total" class="text-teal-700 font-extrabold text-xl">S/ 0.00</span>
+            </div>
+
+            <!-- Método de Pago -->
+            <div>
+              <label class="block text-xs font-semibold text-slate-500 uppercase mb-1">Método de Pago</label>
+              <div class="grid grid-cols-4 gap-2">
+                <button type="button" onclick="selectPayment('EFECTIVO')" class="pay-method-btn active py-2 text-xs font-semibold border rounded-lg border-teal-600 bg-teal-50 text-teal-700 text-center" data-method="EFECTIVO">
+                  Efectivo
+                </button>
+                <button type="button" onclick="selectPayment('YAPE')" class="pay-method-btn py-2 text-xs font-semibold border rounded-lg border-slate-200 bg-white text-slate-600 text-center" data-method="YAPE">
+                  Yape
+                </button>
+                <button type="button" onclick="selectPayment('PLIN')" class="pay-method-btn py-2 text-xs font-semibold border rounded-lg border-slate-200 bg-white text-slate-600 text-center" data-method="PLIN">
+                  Plin
+                </button>
+                <button type="button" onclick="selectPayment('TARJETA')" class="pay-method-btn py-2 text-xs font-semibold border rounded-lg border-slate-200 bg-white text-slate-600 text-center" data-method="TARJETA">
+                  Tarjeta
+                </button>
+              </div>
+            </div>
+
+            <!-- Botón Cobrar -->
+            <button 
+              id="btn-process-sale"
+              onclick="processSale()" 
+              disabled
+              class="w-full mt-2 py-3 bg-teal-600 hover:bg-teal-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-bold rounded-xl shadow-md transition flex items-center justify-center gap-2"
+            >
+              <i class="fa-solid fa-circle-check"></i> Registrar Venta
+            </button>
+          </div>
+
+        </div>
+      </div>
+
+    </section>
+
+    <!-- 2. PESTAÑA: INVENTARIO -->
+    <section id="view-inventory" class="hidden space-y-6">
+      
+      <!-- KPIs / Métricas de Almacén -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center gap-4">
+          <div class="p-3 bg-teal-100 text-teal-700 rounded-lg text-xl">
+            <i class="fa-solid fa-prescription-bottle-medical"></i>
+          </div>
+          <div>
+            <p class="text-xs font-medium text-slate-500 uppercase">Fármacos Registrados</p>
+            <p id="kpi-total-products" class="text-2xl font-bold text-slate-800">-</p>
+          </div>
+        </div>
+
+        <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center gap-4">
+          <div class="p-3 bg-blue-100 text-blue-700 rounded-lg text-xl">
+            <i class="fa-solid fa-cubes"></i>
+          </div>
+          <div>
+            <p class="text-xs font-medium text-slate-500 uppercase">Unidades en Stock</p>
+            <p id="kpi-total-units" class="text-2xl font-bold text-slate-800">-</p>
+          </div>
+        </div>
+
+        <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center gap-4">
+          <div class="p-3 bg-emerald-100 text-emerald-700 rounded-lg text-xl">
+            <i class="fa-solid fa-money-bill-trend-up"></i>
+          </div>
+          <div>
+            <p class="text-xs font-medium text-slate-500 uppercase">Valor de Inventario</p>
+            <p id="kpi-inventory-value" class="text-2xl font-bold text-slate-800">S/ 0.00</p>
+          </div>
+        </div>
+
+        <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center gap-4">
+          <div class="p-3 bg-rose-100 text-rose-700 rounded-lg text-xl">
+            <i class="fa-solid fa-triangle-exclamation"></i>
+          </div>
+          <div>
+            <p class="text-xs font-medium text-slate-500 uppercase">Alertas Stock Crítico</p>
+            <p id="kpi-low-stock" class="text-2xl font-bold text-rose-600">-</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tabla de Medicamentos -->
+      <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+        <div class="px-5 py-4 border-b border-slate-200 flex flex-wrap justify-between items-center gap-3">
+          <h2 class="font-bold text-slate-800 text-base flex items-center gap-2">
+            <i class="fa-solid fa-list-check text-teal-600"></i> Control Detallado de Inventario
+          </h2>
+          <button onclick="loadInventoryView()" class="text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold px-3 py-1.5 rounded-lg border border-slate-300">
+            <i class="fa-solid fa-rotate-right mr-1"></i> Actualizar
+          </button>
+        </div>
+
+        <div class="overflow-x-auto">
+          <table class="w-full text-left border-collapse text-sm">
+            <thead>
+              <tr class="bg-slate-50 text-slate-500 text-xs uppercase font-semibold border-b border-slate-200">
+                <th class="py-3 px-4">Código</th>
+                <th class="py-3 px-4">Medicamento / Laboratorio</th>
+                <th class="py-3 px-4">Principio Activo</th>
+                <th class="py-3 px-4">Categoría</th>
+                <th class="py-3 px-4">Precio (S/)</th>
+                <th class="py-3 px-4 text-center">Stock Actual</th>
+                <th class="py-3 px-4 text-center">Mínimo</th>
+                <th class="py-3 px-4 text-center">Estado</th>
+              </tr>
+            </thead>
+            <tbody id="inventory-table-body" class="divide-y divide-slate-100 text-slate-700">
+              <!-- Renderizado dinámico -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- 3. PESTAÑA: ALERTAS -->
+    <section id="view-alerts" class="hidden space-y-6">
+      <div class="bg-rose-50 border-l-4 border-rose-500 p-4 rounded-r-xl">
+        <h3 class="font-bold text-rose-800 text-sm flex items-center gap-2">
+          <i class="fa-solid fa-bell-concierge"></i> Módulo de Alertas Automáticas para Reposición
+        </h3>
+        <p class="text-xs text-rose-700 mt-1">
+          El sistema notifica automáticamente los fármacos con stock igual o inferior a su umbral de seguridad, así como los lotes con caducidad próxima aplicando la estrategia FEFO.
+        </p>
+      </div>
+
+      <!-- Alertas de Stock Bajo -->
+      <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-5">
+        <h3 class="font-bold text-slate-800 text-base mb-3 flex items-center gap-2 text-rose-700">
+          <i class="fa-solid fa-triangle-exclamation"></i> Medicamentos con Stock Crítico (Reorden Urgente)
+        </h3>
+        <div id="alerts-low-stock-list" class="space-y-3">
+          <!-- Renderizado dinámico -->
+        </div>
+      </div>
+
+      <!-- Alertas de Lotes Próximos a Vencer -->
+      <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-5">
+        <h3 class="font-bold text-slate-800 text-base mb-3 flex items-center gap-2 text-amber-700">
+          <i class="fa-solid fa-calendar-xmark"></i> Lotes con Caducidad Próxima (Control FEFO)
+        </h3>
+        <div id="alerts-expiring-list" class="space-y-3">
+          <!-- Renderizado dinámico -->
+        </div>
+      </div>
+    </section>
+
+    <!-- 4. PESTAÑA: HISTORIAL DE VENTAS -->
+    <section id="view-sales-history" class="hidden space-y-6">
+      <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+        <div class="px-5 py-4 border-b border-slate-200 flex justify-between items-center">
+          <h2 class="font-bold text-slate-800 text-base flex items-center gap-2">
+            <i class="fa-solid fa-file-invoice-dollar text-teal-600"></i> Historial de Ventas Registradas
+          </h2>
+          <button onclick="loadSalesHistory()" class="text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold px-3 py-1.5 rounded-lg border border-slate-300">
+            <i class="fa-solid fa-rotate-right mr-1"></i> Recargar
+          </button>
+        </div>
+
+        <div class="overflow-x-auto">
+          <table class="w-full text-left border-collapse text-sm">
+            <thead>
+              <tr class="bg-slate-50 text-slate-500 text-xs uppercase font-semibold border-b border-slate-200">
+                <th class="py-3 px-4">N° Ticket</th>
+                <th class="py-3 px-4">Fecha & Hora</th>
+                <th class="py-3 px-4">Cliente</th>
+                <th class="py-3 px-4">Método de Pago</th>
+                <th class="py-3 px-4">Total</th>
+                <th class="py-3 px-4 text-center">Acciones</th>
+              </tr>
+            </thead>
+            <tbody id="sales-history-table-body" class="divide-y divide-slate-100 text-slate-700">
+              <!-- Renderizado dinámico -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Modal de Sugerencia de Medicamentos Equivalentes -->
+  <div id="modal-equivalents" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center hidden p-4">
+    <div class="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 animate-in fade-in zoom-in-95">
+      <div class="flex justify-between items-center pb-3 border-b border-slate-100">
+        <h3 class="font-bold text-slate-800 text-base flex items-center gap-2">
+          <i class="fa-solid fa-shuffle text-teal-600"></i> Sugerencia de Fármacos Equivalentes
+        </h3>
+        <button onclick="closeModal('modal-equivalents')" class="text-slate-400 hover:text-slate-600 text-lg">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+      <p class="text-xs text-slate-500 mt-2">
+        Alternativas disponibles con el mismo principio activo <strong id="modal-ingredient-name" class="text-teal-700 font-bold"></strong>:
+      </p>
+      <div id="modal-equivalents-list" class="divide-y divide-slate-100 my-4 max-h-60 overflow-y-auto">
+        <!-- Contenido dinámico -->
+      </div>
+      <div class="flex justify-end pt-2">
+        <button onclick="closeModal('modal-equivalents')" class="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-semibold rounded-lg">
+          Cerrar
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal de Comprobante / Ticket de Venta -->
+  <div id="modal-ticket" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center hidden p-4">
+    <div class="bg-white rounded-2xl max-w-sm w-full p-6 shadow-2xl border border-slate-200">
+      <div class="text-center pb-3 border-b border-dashed border-slate-300">
+        <h3 class="font-black text-slate-800 text-lg">BOTICA NOVA SALUD</h3>
+        <p class="text-xs text-slate-500">RUC: 20489123451</p>
+        <p class="text-xs text-slate-500">Comprobante de Venta Electrónico</p>
+      </div>
+      <div id="modal-ticket-content" class="py-3 text-xs text-slate-700 space-y-1">
+        <!-- Dinámico -->
+      </div>
+      <div class="pt-3 border-t border-dashed border-slate-300 flex gap-2">
+        <button onclick="window.print()" class="flex-1 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg flex items-center justify-center gap-1">
+          <i class="fa-solid fa-print"></i> Imprimir
+        </button>
+        <button onclick="closeModal('modal-ticket')" class="flex-1 py-2 bg-teal-600 hover:bg-teal-700 text-white text-xs font-semibold rounded-lg">
+          Aceptar
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- JavaScript Frontend -->
+  <script>
+    const API_BASE = 'http://localhost:3000';
+    let products = [];
+    let cart = [];
+    let customers = [];
+    let selectedPayment = 'EFECTIVO';
+
+    // Inicializar
+    document.addEventListener('DOMContentLoaded', async () => {
+      await loadCustomers();
+      await loadProducts();
+      await checkAlertsCount();
+    });
+
+    // Pestañas
+    function switchTab(tabId) {
+      document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.classList.remove('bg-teal-800', 'text-white');
+        btn.classList.add('text-teal-100');
+      });
+      document.getElementById(`tab-${tabId}`).classList.add('bg-teal-800', 'text-white');
+      document.getElementById(`tab-${tabId}`).classList.remove('text-teal-100');
+
+      document.getElementById('view-pos').classList.add('hidden');
+      document.getElementById('view-inventory').classList.add('hidden');
+      document.getElementById('view-alerts').classList.add('hidden');
+      document.getElementById('view-sales-history').classList.add('hidden');
+
+      document.getElementById(`view-${tabId}`).classList.remove('hidden');
+
+      if (tabId === 'inventory') loadInventoryView();
+      if (tabId === 'alerts') loadAlertsView();
+      if (tabId === 'sales-history') loadSalesHistory();
+    }
+
+    // Cargar Clientes
+    async function loadCustomers() {
+      try {
+        const res = await fetch(`${API_BASE}/customers`);
+        customers = await res.json();
+        const select = document.getElementById('pos-customer-select');
+        select.innerHTML = '<option value="">Cliente Ocasional / Sin DNI</option>';
+        customers.forEach(c => {
+          select.innerHTML += `<option value="${c.id}">${c.fullName} (DNI: ${c.documentNumber || 'S/N'})</option>`;
+        });
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    // Cargar Productos
+    async function loadProducts(search = '') {
+      try {
+        const url = search ? `${API_BASE}/products?search=${encodeURIComponent(search)}` : `${API_BASE}/products`;
+        const res = await fetch(url);
+        products = await res.json();
+        renderPosProducts(products);
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    // Render POS Productos
+    function renderPosProducts(items) {
+      const container = document.getElementById('pos-products-list');
+      document.getElementById('pos-results-count').innerText = `${items.length} productos`;
+
+      if (items.length === 0) {
+        container.innerHTML = `
+          <div class="py-8 text-center text-slate-400 text-sm">
+            <p>No se encontraron medicamentos</p>
+          </div>
+        `;
+        return;
+      }
+
+      container.innerHTML = items.map(p => {
+        const isOutOfStock = p.currentStock <= 0;
+        const isLowStock = p.currentStock <= p.minStock && !isOutOfStock;
+
+        let badgeStock = `<span class="bg-emerald-100 text-emerald-800 text-xs px-2 py-0.5 rounded-full font-semibold">Stock: ${p.currentStock}</span>`;
+        if (isOutOfStock) {
+          badgeStock = `<span class="bg-rose-100 text-rose-800 text-xs px-2 py-0.5 rounded-full font-semibold">AGOTADO</span>`;
+        } else if (isLowStock) {
+          badgeStock = `<span class="bg-amber-100 text-amber-800 text-xs px-2 py-0.5 rounded-full font-semibold">Bajo Stock: ${p.currentStock}</span>`;
+        }
+
+        return `
+          <div class="p-4 flex items-center justify-between hover:bg-slate-50 transition gap-4">
+            <div class="flex-1">
+              <div class="flex items-center gap-2">
+                <span class="text-xs font-mono text-slate-400">${p.barcode}</span>
+                ${badgeStock}
+                <span class="text-xs text-slate-500 bg-slate-100 px-2 py-0.5 rounded">${p.category ? p.category.name : 'Farmacia'}</span>
+              </div>
+              <h4 class="font-semibold text-slate-800 text-sm mt-0.5">${p.name}</h4>
+              <p class="text-xs text-slate-500">
+                P. Activo: <strong class="text-teal-700">${p.activeIngredient || 'N/A'}</strong> | Lab: ${p.laboratory || 'N/A'} | ${p.presentation || ''}
+              </p>
+            </div>
+
+            <div class="text-right flex flex-col items-end gap-1">
+              <span class="text-base font-bold text-slate-800">S/ ${Number(p.price).toFixed(2)}</span>
+              
+              <div class="flex items-center gap-1.5">
+                ${p.activeIngredient ? `
+                  <button 
+                    onclick="showEquivalents('${p.activeIngredient}', ${p.id})" 
+                    title="Ver medicamentos equivalentes / genéricos"
+                    class="p-1.5 text-xs text-teal-700 bg-teal-50 hover:bg-teal-100 rounded-lg border border-teal-200"
+                  >
+                    <i class="fa-solid fa-shuffle"></i>
+                  </button>
+                ` : ''}
+
+                <button 
+                  onclick="addToCart(${p.id})" 
+                  ${isOutOfStock ? 'disabled' : ''}
+                  class="px-3 py-1.5 text-xs font-semibold rounded-lg bg-teal-600 hover:bg-teal-700 text-white disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed flex items-center gap-1 shadow-sm"
+                >
+                  <i class="fa-solid fa-plus"></i> Añadir
+                </button>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    // Buscador POS
+    let searchTimeout = null;
+    function handleSearch(val) {
+      clearTimeout(searchTimeout);
+      searchTimeout = setTimeout(() => {
+        loadProducts(val.trim());
+      }, 250);
+    }
+
+    // Carrito
+    function addToCart(productId) {
+      const prod = products.find(p => p.id === productId);
+      if (!prod) return;
+
+      const existing = cart.find(item => item.productId === productId);
+      if (existing) {
+        if (existing.quantity + 1 > prod.currentStock) {
+          showToast(`No puedes añadir más unidades. Stock disponible: ${prod.currentStock}`, 'warning');
+          return;
+        }
+        existing.quantity += 1;
+      } else {
+        cart.push({
+          productId: prod.id,
+          name: prod.name,
+          price: Number(prod.price),
+          quantity: 1,
+          maxStock: prod.currentStock
+        });
+      }
+      renderCart();
+    }
+
+    function updateCartQty(productId, delta) {
+      const item = cart.find(i => i.productId === productId);
+      if (!item) return;
+
+      const newQty = item.quantity + delta;
+      if (newQty <= 0) {
+        cart = cart.filter(i => i.productId !== productId);
+      } else if (newQty > item.maxStock) {
+        showToast(`Stock máximo alcanzado (${item.maxStock})`, 'warning');
+      } else {
+        item.quantity = newQty;
+      }
+      renderCart();
+    }
+
+    function clearCart() {
+      cart = [];
+      renderCart();
+    }
+
+    function renderCart() {
+      const container = document.getElementById('pos-cart-items');
+      const btnProcess = document.getElementById('btn-process-sale');
+
+      if (cart.length === 0) {
+        container.innerHTML = `
+          <div class="py-10 text-center text-slate-400 text-sm">
+            <i class="fa-solid fa-cart-arrow-down text-3xl mb-2 text-slate-300"></i>
+            <p>El carrito está vacío</p>
+            <p class="text-xs">Selecciona productos de la lista para agregarlos.</p>
+          </div>
+        `;
+        document.getElementById('pos-subtotal').innerText = 'S/ 0.00';
+        document.getElementById('pos-igv').innerText = 'S/ 0.00';
+        document.getElementById('pos-total').innerText = 'S/ 0.00';
+        btnProcess.disabled = true;
+        return;
+      }
+
+      let total = 0;
+      container.innerHTML = cart.map(item => {
+        const itemSubtotal = item.quantity * item.price;
+        total += itemSubtotal;
+        return `
+          <div class="py-2.5 flex items-center justify-between text-xs">
+            <div class="flex-1 pr-2">
+              <p class="font-semibold text-slate-800">${item.name}</p>
+              <span class="text-slate-400">S/ ${item.price.toFixed(2)} c/u</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <button onclick="updateCartQty(${item.productId}, -1)" class="w-6 h-6 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold">-</button>
+              <span class="font-semibold text-slate-800 w-5 text-center">${item.quantity}</span>
+              <button onclick="updateCartQty(${item.productId}, 1)" class="w-6 h-6 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold">+</button>
+              <span class="font-bold text-slate-800 w-14 text-right">S/ ${itemSubtotal.toFixed(2)}</span>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      const igv = total * 0.18;
+      const subtotal = total - igv;
+
+      document.getElementById('pos-subtotal').innerText = `S/ ${subtotal.toFixed(2)}`;
+      document.getElementById('pos-igv').innerText = `S/ ${igv.toFixed(2)}`;
+      document.getElementById('pos-total').innerText = `S/ ${total.toFixed(2)}`;
+      btnProcess.disabled = false;
+    }
+
+    // Método de pago
+    function selectPayment(method) {
+      selectedPayment = method;
+      document.querySelectorAll('.pay-method-btn').forEach(btn => {
+        btn.classList.remove('border-teal-600', 'bg-teal-50', 'text-teal-700');
+        btn.classList.add('border-slate-200', 'bg-white', 'text-slate-600');
+      });
+      const activeBtn = document.querySelector(`.pay-method-btn[data-method="${method}"]`);
+      activeBtn.classList.remove('border-slate-200', 'bg-white', 'text-slate-600');
+      activeBtn.classList.add('border-teal-600', 'bg-teal-50', 'text-teal-700');
+    }
+
+    // Registrar Venta
+    async function processSale() {
+      if (cart.length === 0) return;
+
+      const customerId = document.getElementById('pos-customer-select').value;
+      const payload = {
+        customerId: customerId ? parseInt(customerId) : undefined,
+        paymentMethod: selectedPayment,
+        items: cart.map(i => ({ productId: i.productId, quantity: i.quantity }))
+      };
+
+      try {
+        const res = await fetch(`${API_BASE}/sales`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        if (!res.ok) {
+          const err = await res.json();
+          showToast(err.message || 'Error al procesar la venta', 'error');
+          return;
+        }
+
+        const data = await res.json();
+        showToast('¡Venta registrada exitosamente!', 'success');
+
+        // Mostrar Alertas de Stock Bajo si se dispararon
+        if (data.lowStockAlerts && data.lowStockAlerts.length > 0) {
+          data.lowStockAlerts.forEach(alert => {
+            showToast(alert.message, 'warning');
+          });
+        }
+
+        // Mostrar Ticket
+        showTicketModal(data.sale);
+
+        // Limpiar y refrescar
+        cart = [];
+        renderCart();
+        await loadProducts(document.getElementById('pos-search-input').value.trim());
+        await checkAlertsCount();
+
+      } catch (err) {
+        showToast('Error de conexión con el servidor', 'error');
+        console.error(err);
+      }
+    }
+
+    // Equivalentes
+    async function showEquivalents(ingredient, excludeId) {
+      document.getElementById('modal-ingredient-name').innerText = ingredient;
+      const modal = document.getElementById('modal-equivalents');
+      const list = document.getElementById('modal-equivalents-list');
+      list.innerHTML = '<p class="py-4 text-center text-xs text-slate-400">Buscando equivalentes...</p>';
+      modal.classList.remove('hidden');
+
+      try {
+        const res = await fetch(`${API_BASE}/products/equivalents?activeIngredient=${encodeURIComponent(ingredient)}&excludeId=${excludeId}`);
+        const eq = await res.json();
+
+        if (eq.length === 0) {
+          list.innerHTML = `
+            <div class="py-6 text-center text-slate-400 text-xs">
+              <i class="fa-solid fa-circle-info text-2xl mb-1 text-slate-300"></i>
+              <p>No hay otros productos sustitutos en stock para "${ingredient}".</p>
+            </div>
+          `;
+          return;
+        }
+
+        list.innerHTML = eq.map(p => `
+          <div class="py-2.5 flex items-center justify-between text-xs">
+            <div>
+              <p class="font-bold text-slate-800">${p.name}</p>
+              <p class="text-slate-500">${p.laboratory || ''} - Stock: <span class="font-semibold text-teal-700">${p.currentStock}</span></p>
+            </div>
+            <div class="flex items-center gap-2">
+              <span class="font-bold text-slate-800">S/ ${Number(p.price).toFixed(2)}</span>
+              <button onclick="addToCart(${p.id}); closeModal('modal-equivalents');" class="px-2.5 py-1 bg-teal-600 hover:bg-teal-700 text-white rounded font-medium">
+                Elegir
+              </button>
+            </div>
+          </div>
+        `).join('');
+
+      } catch (err) {
+        list.innerHTML = '<p class="text-rose-500 text-xs">Error al cargar equivalentes.</p>';
+      }
+    }
+
+    // Modal Ticket
+    function showTicketModal(sale) {
+      const modal = document.getElementById('modal-ticket');
+      const content = document.getElementById('modal-ticket-content');
+
+      const itemsHtml = sale.details.map(d => `
+        <div class="flex justify-between">
+          <span>${d.quantity}x ${d.product ? d.product.name : 'Item'}</span>
+          <span>S/ ${Number(d.subtotal).toFixed(2)}</span>
+        </div>
+      `).join('');
+
+      content.innerHTML = `
+        <div class="flex justify-between border-b pb-1 mb-1 text-[11px] text-slate-500">
+          <span>Ticket: #${sale.id.toString().padStart(6, '0')}</span>
+          <span>${new Date(sale.saleDate).toLocaleDateString()} ${new Date(sale.saleDate).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+        </div>
+        <p class="text-[11px]"><strong>Cliente:</strong> ${sale.customer ? sale.customer.fullName : 'Público General'}</p>
+        <p class="text-[11px]"><strong>Pago:</strong> ${sale.paymentMethod}</p>
+        <div class="border-t border-b border-dashed my-2 py-2 space-y-1">
+          ${itemsHtml}
+        </div>
+        <div class="flex justify-between font-bold text-sm pt-1">
+          <span>TOTAL:</span>
+          <span>S/ ${Number(sale.total).toFixed(2)}</span>
+        </div>
+      `;
+
+      modal.classList.remove('hidden');
+    }
+
+    function closeModal(id) {
+      document.getElementById(id).classList.add('hidden');
+    }
+
+    // Vista de Inventario
+    async function loadInventoryView() {
+      try {
+        const [dashRes, prodRes] = await Promise.all([
+          fetch(`${API_BASE}/inventory/dashboard`),
+          fetch(`${API_BASE}/products`)
+        ]);
+
+        const dash = await dashRes.json();
+        const prods = await prodRes.json();
+
+        document.getElementById('kpi-total-products').innerText = dash.totalProducts;
+        document.getElementById('kpi-total-units').innerText = dash.totalStockUnits;
+        document.getElementById('kpi-inventory-value').innerText = `S/ ${dash.totalInventoryValue.toFixed(2)}`;
+        document.getElementById('kpi-low-stock').innerText = dash.lowStockCount;
+
+        const tbody = document.getElementById('inventory-table-body');
+        tbody.innerHTML = prods.map(p => {
+          let badge = `<span class="bg-emerald-100 text-emerald-800 text-xs px-2 py-0.5 rounded-full font-semibold">Óptimo</span>`;
+          if (p.currentStock <= 0) {
+            badge = `<span class="bg-rose-100 text-rose-800 text-xs px-2 py-0.5 rounded-full font-semibold">Agotado</span>`;
+          } else if (p.currentStock <= p.minStock) {
+            badge = `<span class="bg-amber-100 text-amber-800 text-xs px-2 py-0.5 rounded-full font-semibold">Bajo Stock</span>`;
+          }
+
+          return `
+            <tr class="hover:bg-slate-50 border-b border-slate-100">
+              <td class="py-3 px-4 font-mono text-xs text-slate-500">${p.barcode}</td>
+              <td class="py-3 px-4">
+                <p class="font-semibold text-slate-800">${p.name}</p>
+                <p class="text-xs text-slate-400">${p.laboratory || 'N/A'}</p>
+              </td>
+              <td class="py-3 px-4 font-medium text-teal-700">${p.activeIngredient || '-'}</td>
+              <td class="py-3 px-4 text-xs text-slate-500">${p.category ? p.category.name : '-'}</td>
+              <td class="py-3 px-4 font-bold text-slate-800">S/ ${Number(p.price).toFixed(2)}</td>
+              <td class="py-3 px-4 text-center font-bold ${p.currentStock <= p.minStock ? 'text-rose-600' : 'text-slate-800'}">${p.currentStock}</td>
+              <td class="py-3 px-4 text-center text-slate-500">${p.minStock}</td>
+              <td class="py-3 px-4 text-center">${badge}</td>
+            </tr>
+          `;
+        }).join('');
+
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    // Vista de Alertas
+    async function loadAlertsView() {
+      try {
+        const [lowRes, expRes] = await Promise.all([
+          fetch(`${API_BASE}/inventory/alerts/low-stock`),
+          fetch(`${API_BASE}/inventory/alerts/expiring?days=90`)
+        ]);
+
+        const lowStock = await lowRes.json();
+        const expiring = await expRes.json();
+
+        // Alertas bajo stock
+        const lowList = document.getElementById('alerts-low-stock-list');
+        if (lowStock.length === 0) {
+          lowList.innerHTML = '<p class="text-xs text-slate-400">Todos los productos cuentan con existencias por encima del stock mínimo.</p>';
+        } else {
+          lowList.innerHTML = lowStock.map(p => `
+            <div class="p-3 bg-rose-50 border border-rose-200 rounded-lg flex items-center justify-between text-xs">
+              <div>
+                <strong class="text-rose-900">${p.name}</strong> (${p.activeIngredient || 'N/A'})
+                <p class="text-rose-700">Stock actual: <strong>${p.currentStock}</strong> unidades | Umbral de reorden: <strong>${p.minStock}</strong></p>
+              </div>
+              <span class="bg-rose-600 text-white font-bold px-2.5 py-1 rounded-full text-[11px]">REPOSICIÓN INMEDIATA</span>
+            </div>
+          `).join('');
+        }
+
+        // Alertas lotes por vencer
+        const expList = document.getElementById('alerts-expiring-list');
+        if (expiring.length === 0) {
+          expList.innerHTML = '<p class="text-xs text-slate-400">No hay lotes próximos a vencer en los próximos 90 días.</p>';
+        } else {
+          expList.innerHTML = expiring.map(b => `
+            <div class="p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-center justify-between text-xs">
+              <div>
+                <strong class="text-amber-900">${b.product ? b.product.name : 'Fármaco'}</strong> (Lote: ${b.batchNumber})
+                <p class="text-amber-700">Fecha de Caducidad: <strong>${b.expiryDate}</strong> | Cantidad disponible: <strong>${b.quantity} unids</strong></p>
+              </div>
+              <span class="bg-amber-500 text-white font-bold px-2 py-0.5 rounded text-[10px]">FEFO: SALIDA PRIORITARIA</span>
+            </div>
+          `).join('');
+        }
+
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    // Historial de Ventas
+    async function loadSalesHistory() {
+      try {
+        const res = await fetch(`${API_BASE}/sales`);
+        const sales = await res.json();
+        const tbody = document.getElementById('sales-history-table-body');
+
+        if (sales.length === 0) {
+          tbody.innerHTML = `<tr><td colspan="6" class="text-center py-6 text-slate-400 text-xs">No hay ventas registradas aún.</td></tr>`;
+          return;
+        }
+
+        tbody.innerHTML = sales.map(s => `
+          <tr class="hover:bg-slate-50 border-b border-slate-100">
+            <td class="py-3 px-4 font-mono font-bold text-teal-700">#${s.id.toString().padStart(6, '0')}</td>
+            <td class="py-3 px-4 text-xs text-slate-600">${new Date(s.saleDate).toLocaleString()}</td>
+            <td class="py-3 px-4 text-xs font-semibold text-slate-800">${s.customer ? s.customer.fullName : 'Público General'}</td>
+            <td class="py-3 px-4 text-xs"><span class="bg-slate-100 text-slate-700 px-2 py-0.5 rounded font-mono font-semibold">${s.paymentMethod}</span></td>
+            <td class="py-3 px-4 font-bold text-slate-900">S/ ${Number(s.total).toFixed(2)}</td>
+            <td class="py-3 px-4 text-center">
+              <button onclick='showTicketModal(${JSON.stringify(s)})' class="px-2.5 py-1 text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 rounded border border-slate-300 font-medium">
+                <i class="fa-solid fa-receipt mr-1"></i> Comprobante
+              </button>
+            </td>
+          </tr>
+        `).join('');
+
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    // Conteo de Alertas para Badge
+    async function checkAlertsCount() {
+      try {
+        const res = await fetch(`${API_BASE}/inventory/alerts/low-stock`);
+        const low = await res.json();
+        const badge = document.getElementById('badge-alerts-count');
+        if (low.length > 0) {
+          badge.innerText = low.length;
+          badge.classList.remove('hidden');
+        } else {
+          badge.classList.add('hidden');
+        }
+      } catch (err) {}
+    }
+
+    // Toast
+    function showToast(msg, type = 'info') {
+      const container = document.getElementById('toast-container');
+      const toast = document.createElement('div');
+      
+      let bg = 'bg-slate-800 text-white';
+      let icon = 'fa-circle-info';
+      if (type === 'success') { bg = 'bg-emerald-600 text-white'; icon = 'fa-circle-check'; }
+      if (type === 'warning') { bg = 'bg-amber-600 text-white'; icon = 'fa-triangle-exclamation'; }
+      if (type === 'error') { bg = 'bg-rose-600 text-white'; icon = 'fa-circle-xmark'; }
+
+      toast.className = `${bg} px-4 py-3 rounded-xl shadow-lg text-xs font-medium flex items-center justify-between gap-3 animate-bounce`;
+      toast.innerHTML = `
+        <div class="flex items-center gap-2">
+          <i class="fa-solid ${icon}"></i>
+          <span>${msg}</span>
+        </div>
+      `;
+      container.appendChild(toast);
+      setTimeout(() => {
+        toast.remove();
+      }, 4000);
+    }
+  </script>
+</body>
+</html>
